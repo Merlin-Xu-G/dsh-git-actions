@@ -1,0 +1,16 @@
+# The dsh-git-actions bundle patch: one Host plugin row owning the
+# /draft-commit, /create-branch-from and /setup-protect-branch-hook commands.
+#
+# Config (all optional, unknown keys fail at activation; a later layer
+# overriding this row replaces `config` wholesale — restate every field):
+#   mainBranches: string[]   protected main branches that are never touched
+#                            (default [main, master])
+#   releasePattern: string   glob classifying release branches; '*' matches
+#                            any run of characters (default 'release/*')
+#   releasePushEnv: string   environment variable that explicitly authorizes
+#                            one push to a release branch
+#                            (default DSH_ALLOW_RELEASE_PUSH)
+- insert:
+    - id: dsh-git-actions
+      name: '@local/dsh-git-actions'
+      config: {}
