@@ -1,13 +1,22 @@
 // Test harness for @local/dsh-git-actions — pure-logic unit tests plus a
 // scratch-repo enforcement matrix for the protection hooks.
-// Run: node .tmp/test.mjs   (from the repository root)
+// Fully self-contained: every scratch repo and fixture is created at runtime
+// inside a unique temp-dir folder that is removed again on exit — the suite
+// never reads or writes the repository's git-ignored .tmp.
+// Run: node test/test.mjs   (from the repository root; or: npm test)
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const moduleUrl = (relative) => pathToFileURL(join(root, relative)).href;
+
+// Scratch root for every fixture this suite needs: a fresh unique folder in
+// the system temp dir, wiped when the process exits (success or failure).
+const scratchRoot = join(tmpdir(), `dsh-git-actions-test-${process.pid}-${Date.now()}`);
+process.on('exit', () => rmSync(scratchRoot, { recursive: true, force: true }));
 
 let passed = 0;
 let failed = 0;
@@ -139,11 +148,15 @@ check('draft prompt is read-only', draftPrompt.includes('read-only')
   && !draftPrompt.includes('push -u')
   && !draftPrompt.includes('Approve —'));
 check('draft prompt presents fenced message and stops', draftPrompt.includes('fenced markdown code block') && draftPrompt.includes('end your turn'));
-check('draft prompt prescribes brief format', draftPrompt.includes('feature: <feature brief description>')
+check('draft prompt prescribes brief format', draftPrompt.includes('<type>: <brief description>')
+  && draftPrompt.includes('feature/bugfix/docs/<any others actions>: <brief description>')
   && draftPrompt.includes('- change a')
   && draftPrompt.includes('- change b')
-  && !draftPrompt.includes('body paragraphs wrapped'));
+  && draftPrompt.includes('no long body paragraphs'));
 check('draft prompt release rule kept for later pushes', draftPrompt.includes('DSH_ALLOW_RELEASE_PUSH=1') && draftPrompt.includes("when the user later asks to push"));
+check('draft prompt confirms clean tree before later commit', draftPrompt.includes('When the user later asks to commit')
+  && draftPrompt.includes('no non-staged change has appeared')
+  && draftPrompt.includes('never sweep unexpected edits into the commit'));
 check('draft prompt carries note', draftPrompt.includes('my note'));
 const plainFacts = { ...facts, branch: 'feature/x', releaseBranch: false, upstream: null };
 const plainPrompt = prompts.buildDraftCommitPrompt(plainFacts, defaults, '');
@@ -161,8 +174,7 @@ const fallbackPrompt = prompts.buildCreateBranchFallbackPrompt(
 check('fallback prompt lists candidates', fallbackPrompt.includes('feature/login') && fallbackPrompt.includes('ask_user_question'));
 
 // --- hooks install/remove in a plain directory -------------------------------------
-const tmpDir = join(root, '.tmp', 'hooks-dir-test');
-rmSync(tmpDir, { recursive: true, force: true });
+const tmpDir = join(scratchRoot, 'hooks-dir-test');
 mkdirSync(tmpDir, { recursive: true });
 const foreign = '#!/bin/sh\necho foreign\n';
 writeFileSync(join(tmpDir, 'pre-commit'), foreign);
@@ -198,10 +210,8 @@ function git(cwd, args, env = {}) {
   return { code: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
 }
 
-const repoDir = join(root, '.tmp', 'hook-repo');
-const originDir = join(root, '.tmp', 'hook-origin.git');
-rmSync(repoDir, { recursive: true, force: true });
-rmSync(originDir, { recursive: true, force: true });
+const repoDir = join(scratchRoot, 'hook-repo');
+const originDir = join(scratchRoot, 'hook-origin.git');
 mkdirSync(repoDir, { recursive: true });
 
 const RUN_HOOK_TESTS = git(repoDir, ['--version']).code === 0;
