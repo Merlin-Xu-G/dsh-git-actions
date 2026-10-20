@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="dsh-git-actions">
+  <path d="M48 6 84 18v26c0 22-16 38-36 46-20-8-36-24-36-46V18Z" fill="#12212e" stroke="#34d399" stroke-width="4" stroke-linejoin="round"/>
+  <g stroke="#e2e8f0" stroke-width="6" stroke-linecap="round" fill="none">
+    <path d="M38 42v6c0 10 24 2 24 14"/>
+    <path d="M62 42v20"/>
+  </g>
+  <g fill="#34d399">
+    <circle cx="38" cy="36" r="7"/>
+    <circle cx="62" cy="36" r="7"/>
+    <circle cx="62" cy="68" r="7"/>
+  </g>
+</svg>

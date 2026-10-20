@@ -1,0 +1,25 @@
+{
+  "name": "@local/dsh-git-actions",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Guarded git workflow commands for DSH sessions: /draft-commit drafts a commit message for explicit user approval and then commits and pushes; /create-branch-from verifies the source branch (offering similar branches when the name misses) and creates the new branch; /setup-protect-branch-hook installs git hooks so main is never touched and release/* pushes require an explicit parameter. Never touches main; release/* origin changes are always confirmed.",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "lib/*.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Git 操作",
+    "description": "受保护的 Git 工作流命令：/draft-commit 起草提交信息，经你确认后提交并推送；/create-branch-from 校验来源分支，名称未命中时给出相近分支供选择；/setup-protect-branch-hook 安装钩子，main 分支永不改动，release/* 推送需显式参数。"
+  }
+}
