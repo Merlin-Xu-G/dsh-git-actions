@@ -2,6 +2,11 @@
 
 A [DeepSeek Harness](https://github.com/deepseek-ai) plugin bundle (`@local/dsh-git-actions`) that automates a guarded git workflow with three session commands. It never touches `main`, and every `release/*` origin change is explicitly confirmed.
 
+## Compatibility
+
+- Minimum DSH: `>=0.2.0-rc.2` — declared in `package.json` → `engines.dsh`. DSH enforces this floor at install/activation and matches prerelease versions, so it never blocks a newer DSH.
+- Latest tested DSH: `0.2.1-rc.2` — recorded in `package.json` → `dsh.latestTestedDshVersion`. Descriptive only; DSH does not enforce it.
+
 ## Commands
 
 | Command | What it does |
