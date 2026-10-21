@@ -172,6 +172,37 @@ const fallbackPrompt = prompts.buildCreateBranchFallbackPrompt(
   defaults,
 );
 check('fallback prompt lists candidates', fallbackPrompt.includes('feature/login') && fallbackPrompt.includes('ask_user_question'));
+const prFacts = {
+  cwd: 'C:/repo',
+  branch: 'feature/pr-thing',
+  baseName: 'main',
+  baseRef: 'origin/main',
+  ahead: 2,
+  behind: 0,
+  commits: ['a1b2c3 feature: add thing', 'd4e5f6 fix: polish thing'],
+  diffStat: ' index.js | 2 ++',
+  originExists: true,
+  releaseHead: false,
+  releaseBase: false,
+};
+const prPrompt = prompts.buildDraftPrPrompt(prFacts, defaults, 'pr note');
+check('pr prompt is read-only', prPrompt.includes('**read-only**')
+  && prPrompt.includes('no push, no PR creation')
+  && prPrompt.includes('do not push, do not create anything'));
+check('pr prompt carries commits and diffstat', prPrompt.includes('a1b2c3 feature: add thing') && prPrompt.includes('index.js | 2 ++'));
+check('pr prompt prescribes brief title and body', prPrompt.includes('<type>: <brief description>')
+  && prPrompt.includes('## Summary') && prPrompt.includes('## Verification'));
+check('pr prompt handles existing PRs', prPrompt.includes('draft an update to its title and body'));
+check('pr prompt gives the later create command', prPrompt.includes('gh pr create --base main --head feature/pr-thing'));
+check('pr prompt guards the later creation', prPrompt.includes('When the user later asks to create the PR')
+  && prPrompt.includes('never push extra commits'));
+check('pr prompt drops release clauses when not involved', !prPrompt.includes('protected release branch'));
+check('pr prompt carries note', prPrompt.includes('pr note'));
+const prReleaseBasePrompt = prompts.buildDraftPrPrompt({ ...prFacts, baseName: 'release/2.0', baseRef: 'origin/release/2.0', releaseBase: true }, defaults, '');
+check('pr prompt flags release base', prReleaseBasePrompt.includes('targets') && prReleaseBasePrompt.includes('protected release branch')
+  && prReleaseBasePrompt.includes('creation and merge need an explicit confirmation'));
+const prReleaseHeadPrompt = prompts.buildDraftPrPrompt({ ...prFacts, branch: 'release/3.0', releaseHead: true }, defaults, '');
+check('pr prompt flags release head', prReleaseHeadPrompt.includes('heads from') && prReleaseHeadPrompt.includes('**release branch**'));
 
 // --- hooks install/remove in a plain directory -------------------------------------
 const tmpDir = join(scratchRoot, 'hooks-dir-test');
@@ -291,6 +322,33 @@ if (RUN_HOOK_TESTS) {
   await hooks.removeHooks(join(repoDir, '.git', 'hooks'));
   r = g(['push', 'origin', 'main']);
   check('main push works after --remove', r.code === 0, r.stderr);
+
+  // 9. /draft-pr kit helpers against the scratch repo, driven through the
+  //    same spawn shape the plugin uses (fake subprocess service)
+  const gitkit = await import(moduleUrl('lib/git.js'));
+  const fakeSubprocess = {
+    resolveExecutable: async (command) => command,
+    spawn(spec) {
+      const result = spawnSync(spec.argv[0], spec.argv.slice(1), { cwd: spec.cwd, encoding: 'utf8' });
+      return {
+        done: Promise.resolve({ exitCode: result.status ?? -1, signal: null }),
+        collected: {
+          stdout: { readFrom: () => ({ text: result.stdout ?? '' }) },
+          stderr: { readFrom: () => ({ text: result.stderr ?? '' }) },
+        },
+      };
+    },
+  };
+  const kit = gitkit.createGitKit(fakeSubprocess, undefined);
+  const detectedBase = await kit.defaultBaseBranch(repoDir);
+  eq('kit detects default base', detectedBase, { name: 'main', ref: 'origin/main' });
+  g(['checkout', 'feature/x']);
+  const prCommits = await kit.rangeCommits(repoDir, 'origin/main');
+  check('kit lists commits ahead', prCommits.length === 1 && prCommits[0].includes('feature work'), JSON.stringify(prCommits));
+  const prAheadBehind = await kit.rangeAheadBehind(repoDir, 'origin/main');
+  eq('kit ahead/behind vs base', prAheadBehind, { ahead: 1, behind: 1 });
+  const prStat = await kit.prDiffStat(repoDir, 'origin/main');
+  check('kit pr diffstat non-empty', prStat.includes('file.txt'), prStat);
 } else {
   check('git available for hook tests', false, 'git not on PATH');
 }

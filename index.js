@@ -1,7 +1,7 @@
 /**
  * @local/dsh-git-actions — Host half of the guarded git workflow bundle.
  *
- * Three human commands (registered through the `commands` service, the same
+ * Four human commands (registered through the `commands` service, the same
  * seam `@deepseek-ai/dsh-plan-mode` uses for `/plan`):
  *
  * - `/draft-commit [note]` — verifies the repository, branch, and change
@@ -12,6 +12,13 @@
  *   questions — committing and pushing happen later, only when the user
  *   asks for them in conversation (release-branch pushes keep the
  *   explicit-confirmation + parameter rule).
+ * - `/draft-pr [note]` — verifies the repository, branch, base branch, and
+ *   the commits ahead host-side, refuses to run on a main branch or with
+ *   nothing ahead of the base, then steers one READ-ONLY procedure prompt:
+ *   review the PR content, draft the title and body, print them as fenced
+ *   markdown blocks, and return control. No push, no PR creation, no
+ *   questions — creation happens later, only when the user asks; PRs touching
+ *   a release branch keep the explicit-confirmation rule.
  * - `/create-branch-from <source-branch> [new-branch]` — resolves the source
  *   branch host-side (local or origin); when the name misses, ranks similar
  *   branches and asks the user to pick; validates the new name; refuses main
@@ -48,7 +55,7 @@ import {
 } from './lib/branch.js';
 import { createGitKit } from './lib/git.js';
 import { inspectHooks, installHooks, isSafeShellBranchName, removeHooks } from './lib/hooks.js';
-import { buildCreateBranchFallbackPrompt, buildDraftCommitPrompt } from './lib/prompts.js';
+import { buildCreateBranchFallbackPrompt, buildDraftCommitPrompt, buildDraftPrPrompt } from './lib/prompts.js';
 
 const CONFIG_KEYS = new Set(['mainBranches', 'releasePattern', 'releasePushEnv']);
 const RELEASE_PATTERN_CHARS = /^[A-Za-z0-9._/*-]+$/;
@@ -273,6 +280,79 @@ export function apply(ctx, config) {
             text: release
               ? `Draft run started on release branch '${branch}' — it presents the draft commit message and stops; commit and push happen only when you ask (a release push additionally needs an explicit confirmation and ${resolved.releasePushEnv}=1).`
               : `Draft run started on '${branch}' — it presents the draft commit message and stops; commit and push happen only when you ask.`,
+          };
+        } catch (error) {
+          return fail(`git inspection failed: ${errorMessage(error)}`);
+        }
+      },
+    }));
+
+    disposers.push(commandCtx.commands.register({
+      name: 'draft-pr',
+      description: 'Draft a pull-request title and body and present them; creation happens only when you ask',
+      input: { hint: '[note]' },
+      // The steered procedure prompt carries any note verbatim; recording
+      // the raw input too would duplicate it in the session log.
+      recordInput: false,
+      handler: async ({ agent, rawInput = '', signal }) => {
+        const services = requireServices(ctx);
+        if (!services.ok) return services.result;
+        const git = createGitKit(services.subprocess, signal);
+        try {
+          const cwd = await services.workingDirectory.ensure(agent, signal);
+          if (!(await git.isGitRepo(cwd))) {
+            return fail(`\`${cwd}\` is not inside a git work tree — open the session in a git repository first.`);
+          }
+          const branch = await git.currentBranch(cwd);
+          if (branch === '') {
+            return fail('HEAD is detached. Check out a branch first (e.g. /create-branch-from <base> <name>).');
+          }
+          if (isMainBranch(branch, resolved)) {
+            return fail(
+              `on protected main branch '${branch}' — a pull request must come from a work branch. Create one first (e.g. /create-branch-from ${branch} <name>).`,
+            );
+          }
+          // Base: a differently-named upstream, else origin's default branch.
+          const upstream = await git.upstreamInfo(cwd);
+          let base = upstream !== null && upstream.name !== `origin/${branch}`
+            ? { name: upstream.name.replace(/^origin\//, ''), ref: upstream.name }
+            : await git.defaultBaseBranch(cwd);
+          if (base === null) {
+            if (!(await git.refExists(cwd, 'refs/remotes/origin/main'))) {
+              return fail('could not detect a base branch (no origin/HEAD and no origin/main) — set an upstream or push the base branch first.');
+            }
+            base = { name: 'main', ref: 'origin/main' };
+          }
+          const commits = await git.rangeCommits(cwd, base.ref);
+          if (commits.length === 0) {
+            return fail(`nothing ahead of ${base.ref} on '${branch}' — a pull request needs at least one commit. Commit first (e.g. /draft-commit).`);
+          }
+          const [{ ahead, behind }, diffStat, originExists] = await Promise.all([
+            git.rangeAheadBehind(cwd, base.ref),
+            git.prDiffStat(cwd, base.ref),
+            git.originExists(cwd),
+          ]);
+          const prompt = buildDraftPrPrompt(
+            {
+              cwd,
+              branch,
+              baseName: base.name,
+              baseRef: base.ref,
+              ahead,
+              behind,
+              commits,
+              diffStat,
+              originExists,
+              releaseHead: isReleaseBranch(branch, resolved),
+              releaseBase: isReleaseBranch(base.name, resolved),
+            },
+            resolved,
+            rawInput.trim(),
+          );
+          agent.steer(createSteeredMessage(prompt));
+          return {
+            kind: 'success',
+            text: `Draft-PR run started: '${branch}' → '${base.name}' (${commits.length} commit(s) ahead) — it presents the draft and stops; creating the PR happens only when you ask.`,
           };
         } catch (error) {
           return fail(`git inspection failed: ${errorMessage(error)}`);
