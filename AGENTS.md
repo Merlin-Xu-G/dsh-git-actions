@@ -9,11 +9,11 @@ The plugin automates the user's customized git workflow through session commands
 ## Layout
 
 - `package.json` / `cordis.patch.yml` — bundle manifest and Loader patch (row `dsh-git-actions`, config defaults `{}`).
-- `index.js` — plugin entry: Config schema (Standard Schema `~standard`), service resolution, and the three command handlers.
+- `index.js` — plugin entry: Config schema (Standard Schema `~standard`), service resolution, and the four command handlers.
 - `lib/branch.js` — pure logic: branch classification, input parsing, similar-branch ranking, status classification. No I/O.
 - `lib/git.js` — git access over the Harness `subprocess` service (`ctx.subprocess`); argv is never shell-interpreted.
 - `lib/hooks.js` — POSIX-sh `pre-commit` / `pre-push` script generation plus idempotent install/remove with foreign-hook backups.
-- `lib/prompts.js` — steered procedure prompts (`/draft-commit` draft phase, create-branch fallback).
+- `lib/prompts.js` — steered procedure prompts (`/draft-commit` and `/draft-pr` draft phases, create-branch fallback).
 - `locale/` (en, zh), `icon.svg` — display metadata read by Plugin Manager / Settings.
 - `test/test.mjs` — the test suite (run it; see below).
 - `.tmp/` — scratch, gitignored.
@@ -22,6 +22,7 @@ The plugin automates the user's customized git workflow through session commands
 ## Commands and their semantics
 
 - `/draft-commit [note]` — host-side verification (repo, branch, change facts), refuses to run on a main branch, then steers a **read-only** procedure: review changes, draft the commit message, print it as a fenced markdown block, end the turn. No staging, no commit, no push, no `ask_user_question` in the run — committing and pushing happen only as ordinary user prompts afterwards. Release branches keep their push rule as prompt text for that later moment.
+- `/draft-pr [note]` — host-side verification (repo, branch, base, commits ahead), refuses on main, detached HEAD, or nothing ahead of the base (base = a differently-named upstream, else origin's default branch), then steers a **read-only** procedure: review the PR content, draft the title and body, print both as fenced markdown blocks, end the turn. No push, no `gh pr create`, no questions — creation happens only as a later user instruction; a `release/*` head or base is flagged for explicit confirmation, and an already-open PR turns the draft into an update proposal.
 - `/create-branch-from <source-branch> [new-branch]` — resolves the source host-side (local, `origin/x` shorthand, or explicit remote ref); on a miss, ranks similar branches and asks the user to pick; validates the new name (`git check-ref-format --branch`); refuses main names, confirms release names; then `git checkout -b`. When no question channel answers, it steers the fallback prompt instead of failing.
 - `/setup-protect-branch-hook [--remove]` — installs/removes both hooks in the effective hooks directory (honors `core.hooksPath`); foreign hooks are backed up to `<hook>.dsh-git-actions.bak` only after the user agrees; `--remove` restores the plain backup when present.
 

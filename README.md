@@ -1,6 +1,6 @@
 # dsh-git-actions
 
-A [DeepSeek Harness](https://github.com/deepseek-ai) plugin bundle (`@local/dsh-git-actions`) that automates a guarded git workflow with three session commands. It never touches `main`, and every `release/*` origin change is explicitly confirmed.
+A [DeepSeek Harness](https://github.com/deepseek-ai) plugin bundle (`@local/dsh-git-actions`) that automates a guarded git workflow with four session commands. It never touches `main`, and every `release/*` origin change is explicitly confirmed.
 
 ## Compatibility
 
@@ -12,6 +12,7 @@ A [DeepSeek Harness](https://github.com/deepseek-ai) plugin bundle (`@local/dsh-
 | Command | What it does |
 |---|---|
 | `/draft-commit [note]` | Inspects the repository host-side, refuses to run on a protected main branch, then runs a **read-only** draft phase in the session: review the changes, draft the commit message, and print it as a markdown block — then returns to you. Committing and pushing are done by ordinary prompts when you ask. |
+| `/draft-pr [note]` | Detects the PR base (a differently-named upstream or origin's default branch), refuses to run on main or with nothing ahead of the base, then runs a **read-only** draft phase: review the PR's commits and diff, draft the title and body, print them as markdown blocks — then returns to you. Creating the PR is an ordinary prompt when you ask; a `release/*` head or base is flagged for explicit confirmation. |
 | `/create-branch-from <source-branch> [new-branch]` | Verifies the source branch exists (local or `origin/…`). If the name misses, ranks similar branches and **asks which one you meant**. Validates the new name, refuses main-branch names, confirms release-branch names, then creates and switches to the branch. |
 | `/setup-protect-branch-hook [--remove]` | Installs (or removes) `pre-commit` / `pre-push` git hooks that enforce the protection rules inside git itself. Existing foreign hooks are backed up to `<hook>.dsh-git-actions.bak`, never silently destroyed. |
 
@@ -19,8 +20,8 @@ A [DeepSeek Harness](https://github.com/deepseek-ai) plugin bundle (`@local/dsh-
 
 Three layers, each enforcing the same two rules — **main branches (`main`, `master` by default) are never modified**, and **`release/*` origin changes always require an explicit user action**:
 
-1. **Command guards (host-side, deterministic)** — `/draft-commit` refuses to run while a main branch is checked out; `/create-branch-from` refuses to create a main branch and asks before creating a `release/*` branch. Branch classification happens in the command handler, before any agent turn.
-2. **Procedure prompts** — the `/draft-commit` workflow is read-only: it reviews, drafts, and presents the message, then returns control; committing and pushing happen only when you ask for them, and for `release/*` branches a later push still requires an explicit confirmation and the per-invocation parameter.
+1. **Command guards (host-side, deterministic)** — `/draft-commit` refuses to run while a main branch is checked out; `/draft-pr` refuses on main, a detached HEAD, or with nothing ahead of the base; `/create-branch-from` refuses to create a main branch and asks before creating a `release/*` branch. Branch classification happens in the command handler, before any agent turn.
+2. **Procedure prompts** — the `/draft-commit` and `/draft-pr` workflows are read-only: they review, draft, and present, then return control; committing, pushing, and PR creation happen only when you ask for them, and for `release/*` branches a later push (or PR creation/merge) still requires an explicit confirmation plus the per-invocation push parameter.
 3. **Git hooks** (installed by `/setup-protect-branch-hook`) — enforcement that survives outside DSH:
    - `pre-commit` refuses commits on main branches (detached HEAD passes, so rebase etc. still work).
    - `pre-push` refuses any push updating a main branch ref on any remote — **there is no override** — and refuses `release/*` pushes unless the push carries the explicit parameter:

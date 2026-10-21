@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Git Actions",
-    "description": "Guarded git workflow commands: /draft-commit drafts a commit message for your approval and then commits and pushes; /create-branch-from verifies the base branch and offers similar ones when the name misses; /setup-protect-branch-hook installs hooks so main is never touched and release/* pushes need an explicit parameter."
+    "description": "Guarded git workflow commands: /draft-commit drafts a commit message and prints it (committing and pushing happen only when you ask); /draft-pr drafts a pull-request title and body the same way; /create-branch-from verifies the source branch and offers similar ones when the name misses; /setup-protect-branch-hook installs hooks so main is never touched and release/* pushes need an explicit parameter."
   }
 }
